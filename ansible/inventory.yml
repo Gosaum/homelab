@@ -1,0 +1,10 @@
+all:
+  hosts:
+
+    rpi3: # raspberry pi 3 running ubuntu server
+
+      ansible_host: "{{ tailscale_hostname }}"
+      ansible_user: ansible
+      ansible_ssh_private_key_file: ~/.ssh/id_ed25519_ansible
+
+      ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new" # trust an unknow host key on first contact

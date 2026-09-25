@@ -1,0 +1,45 @@
+- name: Setup Raspberry Pi3 Ubuntu Server for secure remote access
+
+  hosts: rpi3
+
+  become: true # run tasks as root via sudo
+
+  tasks:
+
+    - name: Update the apt cache # refresh apt cache to ensure package lists are up-to-date
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600 # skip refresh if the cache was updated within the last hour
+
+    - name: Install Tailscale
+      ansible.builtin.shell: | # pipefail ensures pipe fails if curl fails
+        set -o pipefail
+        curl -fsSL https://tailscale.com/install.sh | sh
+      args:
+        executable: /bin/bash # required for pipefail
+        creates: /usr/bin/tailscale # skip if already installed
+
+    - name: Read Tailscale status # answers "is this node already on the tailnet?"
+      ansible.builtin.command: tailscale status --json
+      register: ts_status # store the output for the next task
+      changed_when: false # reading is not a change
+      failed_when: false # non-zero exit is handled by the next task
+      check_mode: false
+
+    - name: Join the tailnet
+      ansible.builtin.command: > # headless login with an auth key, no browser
+        tailscale up
+        --authkey={{ tailscale_authkey }}
+        --hostname={{ tailscale_hostname }}
+      when: ts_status.rc != 0 or (ts_status.stdout | from_json).BackendState != 'Running'
+      no_log: true # keep the auth key out of the logs
+ 
+    - name: Add additional SSH users
+      ansible.builtin.import_tasks: tasks/add_additional_ssh_users.yml
+      
+  handlers:
+ 
+    - name: Reload SSH
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded

@@ -1,0 +1,7 @@
+tailscale_hostname: rpi3-server
+
+additional_ssh_users: # passwords must be set and placed in the rpi3 vault
+  alex:
+    admin: true
+    ssh_keys:
+    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIHkktyBz2mculPDVYaf3L8XvBKn9yInzx41NSzz8h8x rpi3-server
