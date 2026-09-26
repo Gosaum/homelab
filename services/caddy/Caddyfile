@@ -1,0 +1,3 @@
+rpi3-server.tail6dcb17.ts.net {
+    reverse_proxy webserver:80 # docker compose internal dns resolves 'webserver' to its container ip
+}

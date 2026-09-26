@@ -1,6 +1,28 @@
 services:
+  caddy:
+    build: ./caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - /var/run/tailscale:/var/run/tailscale
+    depends_on:
+      webserver:
+        condition: service_healthy
+    restart: unless-stopped
   webserver:
     build: ./webserver
-    ports:
-      - 8080:80
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
