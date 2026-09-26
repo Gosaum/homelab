@@ -19,7 +19,7 @@
         executable: /bin/bash # required for pipefail
         creates: /usr/bin/tailscale # skip if already installed
 
-    - name: Read Tailscale status # answers "is this node already on the tailnet?"
+    - name: Read Tailscale status # answer "is this node already on the tailnet?"
       ansible.builtin.command: tailscale status --json
       register: ts_status # store the output for the next task
       changed_when: false # reading is not a change
@@ -36,10 +36,80 @@
  
     - name: Add additional SSH users
       ansible.builtin.import_tasks: tasks/add_additional_ssh_users.yml
-      
+
+    - name: Install python3-debian # the deb822_repository task below needs python
+      ansible.builtin.apt:
+        name: python3-debian
+        state: present
+ 
+    - name: Add the Docker apt repository
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: https://download.docker.com/linux/ubuntu
+        suites: "{{ ansible_facts['distribution_release'] }}"
+        components: stable
+        signed_by: https://download.docker.com/linux/ubuntu/gpg # key used to verify the packages
+      register: docker_repo
+ 
+    - name: Update the apt cache after adding the Docker repository
+      ansible.builtin.apt:
+        update_cache: true
+      when: docker_repo is changed # task skipped if the repository already existed
+ 
+    - name: Install Docker
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Start Docker and enable it at boot # so the web server comes back after a power cut
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+ 
+    - name: Configure the Docker daemon # save disk space on the Pi's small microSD card
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: | # "local" rotates and compresses logs
+          {
+            "log-driver": "local"
+          }
+        mode: "0644"
+        validate: /usr/bin/dockerd --validate --config-file=%s # refuse a broken config
+      notify: Restart Docker # daemon.json is only read at startup
+  
+    - name: Copy the app files
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../services/" # trailing '/' copies the content, not the folder itself
+        dest: "/opt/services"
+ 
+    - name: Apply pending handlers now # docker must be restarted before the containers start
+      ansible.builtin.meta: flush_handlers
+ 
+    - name: Start the web server # docker compose up -d --build
+      community.docker.docker_compose_v2:
+        project_src: "/opt/services"
+        build: always
+        state: present
+ 
+    - name: Remove old images left behind by rebuilds # save space on the microSD card
+      ansible.builtin.command: docker image prune --force
+      changed_when: false # cleaning does not need to be reported as a change
+  
   handlers:
  
     - name: Reload SSH
       ansible.builtin.service:
         name: ssh
         state: reloaded
+    
+    - name: Restart Docker
+      ansible.builtin.service:
+        name: docker
+        state: restarted

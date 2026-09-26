@@ -1,4 +1,4 @@
-- name: Merge each user's vaulted password hash into their config # joins vars.yml (public) and vault.yml (secrets) by username
+- name: Merge each user's vaulted password hash into their config # join vars.yml (public) and vault.yml (secrets) by username
   ansible.builtin.set_fact:
     additional_ssh_users_merged: >-
       {{ additional_ssh_users_merged | default({}) | combine({
@@ -48,7 +48,7 @@
     label: "{{ item.key }}"
   no_log: true # password hashes shouldn't hit the logs
 
-- name: Authorize SSH keys for additional users # flattens {user: [keys]} into one (user, key) pair per loop item
+- name: Authorize SSH keys for additional users # flatten {user: [keys]} into one (user, key) pair per loop item
   ansible.posix.authorized_key:
     user: "{{ item.0.key }}"
     key: "{{ item.1 }}"
@@ -59,10 +59,10 @@
 - name: Harden the SSH server # disable root/password login once at least one valid user has a key
   ansible.builtin.copy:
     dest: /etc/ssh/sshd_config.d/00-hardening.conf
-    content: | # blocks root logins and requires keys to authenticate
+    content: | # block root logins and requires keys to authenticate
       PermitRootLogin no
       PasswordAuthentication no
     mode: "0644" # -rw-r--r--
     validate: /usr/sbin/sshd -t -f %s # refuse a broken config
-  when: (valid_ssh_users | subelements('value.ssh_keys')) | length > 0
-  notify: Reload SSH # re-reads the config without dropping existing connections
+  when: (valid_ssh_users | subelements('value.ssh_keys')) | length > 0 # avoid being locked out
+  notify: Reload SSH # re-read the config without dropping existing connections
