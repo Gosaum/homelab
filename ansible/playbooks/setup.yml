@@ -1,0 +1,161 @@
+- name: Setup the Raspberry Pi 3 server
+  hosts: rpi3
+  become: true # run tasks as root via sudo
+
+  tasks:
+
+    - name: Update the apt cache # refresh apt cache to ensure package lists are up-to-date
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600 # skip refresh if the cache was updated within the last hour
+
+    - name: Install Tailscale
+      ansible.builtin.shell: | # pipefail ensures pipe fails if curl fails
+        set -o pipefail
+        curl -fsSL https://tailscale.com/install.sh | sh
+      args:
+        executable: /bin/bash # required for pipefail
+        creates: /usr/bin/tailscale # skip if already installed
+
+    - name: Read Tailscale status # answer "is this node already on the tailnet?"
+      ansible.builtin.command: tailscale status --json
+      register: ts_status # store the output for the next task
+      changed_when: false # reading is not a change
+      failed_when: false # non-zero exit is handled by the next task
+      check_mode: false
+
+    - name: Join the tailnet
+      ansible.builtin.command: > # headless login with an auth key, no browser
+        tailscale up
+        --authkey={{ tailscale_authkey }}
+        --hostname={{ tailscale_hostname }}
+      when: ts_status.rc != 0 or (ts_status.stdout | from_json).BackendState != 'Running'
+      no_log: true # keep the auth key out of the logs
+ 
+    - name: Merge each user's vaulted password hash into their config # join vars.yml (public) and vault.yml (secrets) by username
+      ansible.builtin.set_fact:
+        additional_ssh_users_merged: >-
+          {{ additional_ssh_users_merged | default({}) | combine({
+              item.key: item.value | combine({
+                'password_hash': ssh_users_passwords | default({}) | dict2items
+                  | selectattr('key', 'equalto', item.key)
+                  | map(attribute='value') | first | default('')
+              })
+            })
+          }}
+      loop: "{{ additional_ssh_users | default({}) | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      no_log: true # merged data includes password hashes
+
+    - name: Fail if a user has no password
+      ansible.builtin.fail:
+        msg: "User '{{ item.key }}' has no password defined in ssh_users_passwords"
+      loop: "{{ additional_ssh_users_merged | default({}) | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.value.password_hash | length == 0
+
+    - name: Fail if a user has no SSH keys
+      ansible.builtin.fail:
+        msg: "User '{{ item.key }}' has no ssh_keys defined"
+      loop: "{{ additional_ssh_users_merged | default({}) | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      when: item.value.ssh_keys is not defined or item.value.ssh_keys | length == 0
+
+    - name: Convert additional_ssh_users_merged to a list # already validated above, no filtering needed
+      ansible.builtin.set_fact:
+        valid_ssh_users: "{{ additional_ssh_users_merged | default({}) | dict2items }}"
+      no_log: true # still carries password hashes
+
+    - name: Create additional users
+      ansible.builtin.user:
+        name: "{{ item.key }}"
+        password: "{{ item.value.password_hash }}" # needed for sudo prompts even with ssh password auth disabled
+        groups: "{{ 'sudo' if item.value.admin | default(false) else omit }}" # defaults to non-admin
+        append: true
+        shell: /bin/bash
+        create_home: true
+      loop: "{{ valid_ssh_users }}"
+      loop_control:
+        label: "{{ item.key }}"
+      no_log: true # password hashes shouldn't hit the logs
+
+    - name: Authorize SSH keys for additional users # flatten {user: [keys]} into one (user, key) pair per loop item
+      ansible.posix.authorized_key:
+        user: "{{ item.0.key }}"
+        key: "{{ item.1 }}"
+      loop: "{{ valid_ssh_users | subelements('value.ssh_keys') }}"
+      loop_control:
+        label: "{{ item.0.key }}"
+
+    - name: Harden the SSH server # disable root/password login once at least one valid user has a key
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/00-hardening.conf
+        content: | # block root logins and requires keys to authenticate
+          PermitRootLogin no
+          PasswordAuthentication no
+        mode: "0644" # -rw-r--r--
+        validate: /usr/sbin/sshd -t -f %s # refuse a broken config
+      when: (valid_ssh_users | subelements('value.ssh_keys')) | length > 0 # avoid being locked out
+      notify: Reload SSH # re-read the config without dropping existing connections
+
+    - name: Install python3-debian # the deb822_repository task below needs python
+      ansible.builtin.apt:
+        name: python3-debian
+        state: present
+ 
+    - name: Add the Docker apt repository
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: deb
+        uris: https://download.docker.com/linux/ubuntu
+        suites: "{{ ansible_facts['distribution_release'] }}"
+        components: stable
+        signed_by: https://download.docker.com/linux/ubuntu/gpg # key used to verify the packages
+      register: docker_repo
+ 
+    - name: Update the apt cache after adding the Docker repository
+      ansible.builtin.apt:
+        update_cache: true
+      when: docker_repo is changed # task skipped if the repository already existed
+ 
+    - name: Install Docker
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Start Docker and enable it at boot # so the web server comes back after a power cut
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+ 
+    - name: Configure the Docker daemon # save disk space on the Pi's small microSD card
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: | # "local" rotates and compresses logs
+          {
+            "log-driver": "local"
+          }
+        mode: "0644"
+        validate: /usr/bin/dockerd --validate --config-file=%s # refuse a broken config
+      notify: Restart Docker # daemon.json is only read at startup
+
+  handlers:
+
+    - name: Reload SSH
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+  
+    - name: Restart Docker
+      ansible.builtin.service:
+        name: docker
+        state: restarted

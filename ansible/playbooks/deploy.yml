@@ -1,0 +1,19 @@
+- name: Deploy services with Docker
+  hosts: rpi3
+  become: true # run tasks as root via sudo
+  tasks:
+
+    - name: Copy the app files
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../services/" # trailing '/' copies the content, not the folder itself
+        dest: "/opt/services"
+ 
+    - name: Start the web server # docker compose up -d --build
+      community.docker.docker_compose_v2:
+        project_src: "/opt/services"
+        build: always
+        state: present
+ 
+    - name: Remove old images left behind by rebuilds # save space on the microSD card
+      ansible.builtin.command: docker image prune --force
+      changed_when: false # cleaning does not need to be reported as a change

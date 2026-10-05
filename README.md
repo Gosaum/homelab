@@ -42,8 +42,8 @@ homelab/
 │   ├── inventory.yml       # define ansible managed hosts
 │   ├── ...
 │   ├── playbooks/
-│   │   ├── setup_rpi3.yml  # define server setup (main playbook)
-│   │   └── tasks/          # tasks kept out of the main playbook
+│   │   ├── deploy.yml      # services deployment playbook
+│   │   └── setup.yml       # server setup playbook
 │   └── host_vars/
 │       └── rpi3/           # host configuration variables
 │           ├── vars.yml    # store values
@@ -97,10 +97,13 @@ rm -f host_vars/rpi3/vault.yml
 ansible-vault create host_vars/rpi3/vault.yml
 ```
 
+The vault should contain the sudo password that will be used by the `ansible` user.
+
 Generate a reusable Tailscale auth key from the Tailscale admin console and add it to the vault:
 
 ```yaml
-tailscale_authkey: "tskey-auth-xxxxxxxx"
+ansible_become_password: "xxxxxxxx" # Sudo password for the ansible user
+tailscale_authkey: "tskey-auth-xxxxxxxx" # Tailscale auth key
 ```
 
 **[ 3 ] Configure SSH users (optional)**
@@ -150,7 +153,7 @@ ping -4 rpi3-server.local
 From the `ansible/` directory, run the playbook against that address:
 
 ```bash
-ansible-playbook playbooks/setup_rpi3.yml -e ansible_host=<IP> -K
+ansible-playbook playbooks/setup.yml -e ansible_host=<IP>
 ```
 
 Once it completes, check connectivity:
@@ -160,5 +163,11 @@ ansible rpi3 -m ping
 ```
 
 Without the `-e` flag, ansible is using the Tailscale hostname, which only works if Tailscale has successfully been installed on the host.
+
+Finally, deploy the services:
+
+```bash
+ansible-playbook playbooks/deploy.yml
+```
 
 The website should now be reachable at `https://rpi3-server.<domain>/`.
