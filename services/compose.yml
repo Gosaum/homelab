@@ -5,7 +5,6 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
       - /var/run/tailscale:/var/run/tailscale
@@ -16,7 +15,7 @@ services:
   webserver:
     build: ./webserver
     healthcheck:
-      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/api/ping" ]
       interval: 30s
       timeout: 5s
       retries: 3

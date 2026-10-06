@@ -1,0 +1,9 @@
+{% extends "template.html" %}
+
+{% block content %}
+<main>
+    <button id="ping">Ping</button>
+    <p id="pong"></p>
+    <script src="{{ url_for('static', filename='js/ping.js') }}"></script>
+</main>
+{% endblock %}
