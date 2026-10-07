@@ -2,8 +2,14 @@
 
 {% block content %}
 <main>
+    <p id="cpu">--%</p>
+
     <button id="ping">Ping</button>
     <p id="pong"></p>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='js/monitor.js') }}"></script>
+
     <script src="{{ url_for('static', filename='js/ping.js') }}"></script>
 </main>
 {% endblock %}
