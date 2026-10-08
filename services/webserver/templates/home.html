@@ -2,14 +2,35 @@
 
 {% block content %}
 <main>
-    <p id="cpu">--%</p>
-
-    <button id="ping">Ping</button>
-    <p id="pong"></p>
-
+    <div class="kpi-box">
+        <div class="kpi-row">
+            <span class="label">CPU</span>
+            <div class="kpi">
+                <span><span id="cpu">—</span>%</span>
+            </div>
+        </div>
+        <div class="kpi-row">
+            <span class="label">RAM</span>
+            <div class="kpi">
+                <span><span id="ram">—</span>%</span>
+                <span>(<span id="ram_used">—</span>/<span id="ram_total">—</span>GB)</span>
+            </div>
+        </div>
+        <div class="kpi-row">
+            <span class="label">Disk</span>
+            <div class="kpi">
+                <span><span id="disk">—</span>%</span>
+                <span>(<span id="disk_used">—</span>/<span id="disk_total">—</span>GB)</span>
+            </div>
+        </div>
+    </div>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/monitor.js') }}"></script>
-
-    <script src="{{ url_for('static', filename='js/ping.js') }}"></script>
+    <div class="kpi-box">
+        <div class="kpi-row">
+            <span class="label">Uptime</span>
+            <span class="kpi"><span id="uptime">—</span></span>
+        </div>
+    </div>
 </main>
 {% endblock %}

@@ -1,26 +1,29 @@
 :root {
     --font-family: Arial, sans-serif;
     /*colour palette*/
-    --color-1: #121212;
-    --color-2: #454545;
-    --color-3: #f0f0f0;
+    --color-1: #000000;
+    --color-2: #121212;
+    --color-3: #efefef;
     --color-4: #ffffff;
     /*light theme*/
     --bkdg-color: var(--color-3);
-    --text-color: var(--color-1)
+    --text-color: var(--color-1);
+    --bord-color: color-mix(in srgb, var(--color-1) 20%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
         /*dark theme*/
         --bkdg-color: var(--color-2);
-        --text-color: var(--color-4)
+        --text-color: var(--color-4);
+        --bord-color: color-mix(in srgb, var(--color-4) 20%, transparent);
     }
 }
 
 * {
     margin: 0;
     padding: 0;
+    box-sizing: border-box;
 }
 
 html {
@@ -33,10 +36,34 @@ html {
 
 main {
     display: flex;
+    gap: 1em;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1rem;
 
     min-height: 100vh;
+}
+
+.kpi-box {
+    display: flex;
+    gap: 0.25em;
+    flex-direction: column;
+
+    max-width: 80%;
+    padding: 1em 2em;
+
+    border: 2px solid var(--bord-color);
+    box-shadow: 0px 5px 0px var(--bord-color);
+}
+
+.kpi-row {
+    display: flex;
+    gap: 2em;
+    justify-content: space-between;
+
+    .kpi {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
 }
